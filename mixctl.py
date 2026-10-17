@@ -9,6 +9,11 @@
   jev     --track 6 --knobs '{"vocals":{"gain_db":3}}' --question '{...}'
   fix     --track 6 --track-knob vocals [--spoil ..]
   render  --track 6 --knobs '{..}' --out /tmp/mix.wav
+
+knobs на стем: gain_db, hpf_hz, lowmid_f/lowmid_db (bell),
+pres_f/pres_db (bell), shelf_db (5к), pan (-1..1), haas_ms (0..30),
+rev_db (send в общий ревер, <=-80 выкл). "_master": {"gain_db":..} —
+пост-фейдер всей суммы.
 """
 import argparse
 import base64

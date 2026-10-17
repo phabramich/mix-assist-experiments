@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+data/
+sessions/
+outputs_megami/
+.DS_Store
+MEGAMI/

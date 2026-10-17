@@ -104,7 +104,7 @@ def reverb(x, fs, rt=1.4, predelay_ms=20.0):
         ir[: int(predelay_ms * fs / 1000)] = 0
         sos = sig.butter(2, 200, "highpass", fs=fs, output="sos")
         ir = sig.sosfilt(sos, ir, axis=0)
-        _IR_CACHE[key] = ir / np.sqrt((ir ** 2).sum()) * np.sqrt(fs * 0.1)
+        _IR_CACHE[key] = ir / np.sqrt((ir ** 2).sum()) * 0.25  # wet ≈ −12 дБ от сухого send
     ir = _IR_CACHE[key]
     xm = x if x.ndim == 2 else np.stack([x, x], axis=1)
     return np.stack([sig.fftconvolve(xm[:, c], ir[:, c]) for c in (0, 1)], axis=1)

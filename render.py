@@ -77,11 +77,15 @@ def apply_knobs(x, knobs, fs):
 
 
 def mix(stems, params, fs):
-    """stems/params: {имя: массив (n, ch)} / {имя: knobs}."""
+    """stems/params: {имя: массив (n, ch)} / {имя: knobs}.
+    Спец-ключ "_master" — пост-фейдер: {"gain_db": ..} на всю сумму."""
     out = None
     for name, x in stems.items():
         y = apply_knobs(x, params.get(name, {}), fs)
         out = y if out is None else out + y
+    m = params.get("_master")
+    if m and out is not None:
+        out = out * 10 ** (m.get("gain_db", 0.0) / 20)
     return out
 
 

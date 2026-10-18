@@ -152,19 +152,29 @@ def resample(x, fs, fs_out=JUDGE_FS):
     return sig.resample_poly(x, fs_out // g, fs // g, axis=0)
 
 
-def render_for_judge(stems, params, fs, target_lufs=-23.0, max_s=12.0):
+def render_for_judge(stems, params, fs, target_lufs=-23.0, max_s=12.0,
+                     window=None, return_window=False):
     """Полная цепочка: микс -> LUFS -> моно -> 16 кГц float32.
 
-    Длинные миксы режем в окно max_s вокруг пикового RMS — судья упирается
-    в max_prompt_tokens, а JND не требует целой песни.
+    window=(t0, t1) — явное окно в секундах; иначе max_s вокруг пикового
+    RMS (судья упирается в max_prompt_tokens, JND не требует всей песни).
+    return_window=True -> (clip, (t0, t1)).
     """
     m = to_mono(lufs_normalize(mix(stems, params, fs), fs, target_lufs))
     n = int(max_s * fs)
-    if len(m) > n:
+    if window is not None:
+        i0, i1 = int(window[0] * fs), int(window[1] * fs)
+        m = m[i0:i1]
+    elif len(m) > n:
         c = np.concatenate(([0.0], np.cumsum(m.astype(np.float64) ** 2)))
-        i = int(np.argmax(c[n:] - c[:-n]))
-        m = m[i:i + n]
-    return resample(m.astype(np.float32), fs)
+        i0 = int(np.argmax(c[n:] - c[:-n]))
+        m = m[i0:i0 + n]
+    else:
+        i0 = 0
+    clip = resample(m.astype(np.float32), fs)
+    if return_window:
+        return clip, (i0 / fs, (i0 + len(m)) / fs)
+    return clip
 
 
 def save_wav(path, x, fs):

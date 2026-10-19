@@ -79,8 +79,10 @@ def space(dry, wet, fs):
     weight = float(np.sum(power[band]) + 1e-20)
     coherence = float(np.sum(coh[band] * power[band]) / weight)
     diffuse = min(max(1 - coherence, 1e-6), 1 - 1e-6)
-    out = {"diffuse_db": round(10 * np.log10(diffuse / (1 - diffuse)), 2), "width_db": None}
+    out = {"diffuse_db": float(round(float(10 * np.log10(diffuse / (1 - diffuse))), 2)),
+           "width_db": None}
     if getattr(wet, "ndim", 1) == 2 and wet.shape[1] == 2:
         mid, side = (wet[:, 0] + wet[:, 1]) / 2, (wet[:, 0] - wet[:, 1]) / 2
-        out["width_db"] = round(10 * np.log10((side ** 2).mean() / ((mid ** 2).mean() + 1e-20) + 1e-12), 2)
+        ratio = (side ** 2).mean() / ((mid ** 2).mean() + 1e-20) + 1e-12
+        out["width_db"] = float(round(float(10 * np.log10(ratio)), 2))
     return out

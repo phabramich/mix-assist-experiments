@@ -72,4 +72,6 @@ CLI + файлы.
 | вперёд / громче | `gain_db`, `pres_db` +1…+3 |
 
 Пространство проверять только `measure_space`. Баланс — `measure` и `jev_ask` с окном секции (`from_s`/`to_s`). Пространство судьёй не судить.
+
+Первый прогон на целой песне: `experiments/014`. На Бруснике разброс z по `diffuse_db` ~1.3 дБ — пространство делает консоль (`wet`), не выбор эмбеддинга.
 - LLM-ключи для архитектора: opencode-роутер helium `https://router.y7.hk/v1` (OpenAI-совместимый), ключ читать из `~/.local/share/opencode/auth.json` (helium.key); рабочие модели: `antigravity/claude-sonnet-4-6` (дефолт архитектора), `antigravity/gemini-3.8-flash-low`; `vectide3/*`, `kimi`, `x/*`, `ds/*` по этому ключу недоступны/без баланса.

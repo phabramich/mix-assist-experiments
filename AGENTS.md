@@ -22,7 +22,7 @@
 ## Железо
 
 - Mac — разработка и оркестратор.
-- Windows + NVIDIA 8 ГБ — Sori, d1-omni, небольшие LoRA.
+- Windows + AMD RX 6600M — оркестратор и MEGAMI (ROCm через Unsloth Studio). NVIDIA 8 ГБ — Sori, d1-omni, небольшие LoRA, если машина есть.
 - Modal (Starter, $30/мес) — MF, AudioJev, clef-omni, LoRA для MF.
 
 ## Интерфейс MVP
@@ -47,10 +47,29 @@ CLI + файлы.
 - Открытые UX-долги от агента: нет caption/jev на один стем; неизвестно, какой срез слышит судья; noul — голый скаляр без семантики шкалы.
 - Ландшафт подходов: `docs/landscape.md` + `docs/path-b.md`. Коротко: «сумматор» = фронтир поля (MEGAMI поднимается на L4, веса открыты NC-SA; FxNorm-automix MIT под K=4; RoEx Tonn — единственный API с params-out, 1000 бесплатных кредитов); агент-в-DAW почти пустой; наша связка агент+типизированный судья — незанятая клетка.
 - План наград по SPHERE (arXiv:2608.30559): Qwen2.5-Omni-3B → JSON-параметры → вычислимые награды (межстемовая маскировка, LUFS/спектр vs референс, role-уровни); NeMo-RL умеет audio-GRPO на этой модели. Гибрид «добавь струнные»: Stem-JEPA (gap detection) → ACE-Step 1.5 lego (генерация стема по контексту).
-- MEGAMI вынесен из репо на отдельную GPU-машину (эксперименты пути B). Здесь остались только handoff-файлы: `megami_standalone.sh` (репо+deps+5 чекпоинтов+все патчи: CLAP position_ids, `checkpoints/config.yaml` = копия `utils/st_ito/config.yaml`, symlink `CLAP_DA_public-100000.pt`) + `megami_run.py <dir> [N]`. Выводы eval'ов: `experiments/010`+`011` — 2/4 сэмпла попадают в баланс инженера, нужен внешний селектор. Модель ≤14 стемов-шин, моно ок (дублируется), отдавать dry — EQ/comp/reverb/pan/Haas она делает сама, тюн/исполнительские FX печатать заранее. Modal-апп `mix-assist-megami` и volume `megami-ckpts` удалены.
+- MEGAMI живёт в `megami/` (vendored SonyResearch/MEGAMI, CC BY-NC-SA) и считается локально на Windows + AMD RX 6600M питоном Unsloth Studio. Оркестратор — `.venv\Scripts\python`. Секционный пайплайн — раздел ниже. Выводы eval'ов: `experiments/010`+`011` — 2/4 сэмпла попадают в баланс инженера, нужен внешний селектор. Модель ≤14 стемов, моно ок (дублируется), отдавать dry — EQ/comp/reverb/pan/Haas она делает сама, тюн/исполнительские FX печатать заранее.
 - Честный eval на MedleyDB Sample (`experiments/011`): Phoenix_ScotchMorris, flute −6дБ. 2/4 сэмпла MEGAMI попали в баланс инженера (2.22–2.24 vs ref 2.26). Агентный fix утёк до +11.6дБ: target 2.48 откалиброван под другую сессию — «правильный баланс» имеет разный score на разном материале, target надо калибровать per-session. `render_for_judge` теперь режет окно 12с вокруг пикового RMS (cumsum) — иначе судья падает по max_prompt_tokens.
 - Сырой пилот `experiments/012`: агент свёл 5 моно-каналов Rainfall (сам определил роли f0-анализом, починил «гармония громче лида»). Критичные находки: `fix` не резолвит не-семантические имена стемов (vox_a → runaway; нужны слова или описание в STATE), судья EQ-слеп (±6дБ → дельта <0.1), приминг-галлюцинации (слышит текст вопроса при заглушенном стеме, conf 0.92), окно 12с = только припев, нет master gain.
 - Полная консоль `experiments/013`: добавлены `pan` (−1..1), `haas_ms` (0..30), `rev_db` (send в общий конволюционный ревер IR=шум+эксп. затухание, wet −12дБ от send), `_master`. Стемы сессии переименованы семантически (vocal1-3, acoustic/electric_guitar) — иначе fix/jev не резолвят. Баг моно+стерео суммы пофикшен. Ручной прогон: −21.8 LUFS, corr 0.90. Главная слепая зона: судья моно 12с — пространство не верифицируемо им вообще.
 - Файл-режим для DAW-ценария: `mixctl meters/caption/jev --file x.wav`, `compare --file A --file2 B`, окно `--from_s/--to_s` (иначе 12с вокруг пикового RMS); jev/caption/compare возвращают `window_s` — срез, который реально слышал судья. MCP: +`measure_file/describe_file/listen_file/compare_files`, у стемовых тулзов параметр `session` (папка WAV).
-- Перед экспериментами гонять `.venv/bin/python selftest.py`.
+- Перед экспериментами гонять `.venv\Scripts\python selftest.py`.
+
+## Секционное сведение (MEGAMI + консоль)
+
+Сессия — `sessions/<имя>/`: `dry/*.wav`, `sections.json`, `plan.json`, `megami/bank.pt` + `bank.json`, кэш `megami/wet/<stem>/z<k>_<t0>_<t1>.wav`.
+
+Порядок: `session_init` → `detect_sections` (DSP; Music Flamingo подписывает кластеры) → агент ставит `label` и зовёт `save_sections` → `megami_bank` → `megami_candidates` по стему и label → `save_plan` → `render_plan_estimate` → `render_plan`. Долгие три команды — фоновые, статус через `job_status`. Повторный рендер после правки ручек идёт из кэша.
+
+`plan.json`: дефолт `z_default` / `wet=1`, затем поля стема, затем `sections[label]`, затем `sections[id]`. `wet` 0 — сухой сигнал, 1 — выход MEGAMI. Стыки — линейный кроссфейд `xfade_s`.
+
+Интент → рычаги:
+
+| Интент | Рычаги |
+|---|---|
+| сухо / близко | z с минимальным `diffuse_db`; `wet` 0.3–0.6; `rev_db` −90 |
+| большое пространство | z с максимальным `diffuse_db`; `rev_db` −16…−10; при желании `haas_ms` 8–15 |
+| шире | больший `width_db` у z, `pan`, `haas_ms` |
+| вперёд / громче | `gain_db`, `pres_db` +1…+3 |
+
+Пространство проверять только `measure_space`. Баланс — `measure` и `jev_ask` с окном секции (`from_s`/`to_s`). Пространство судьёй не судить.
 - LLM-ключи для архитектора: opencode-роутер helium `https://router.y7.hk/v1` (OpenAI-совместимый), ключ читать из `~/.local/share/opencode/auth.json` (helium.key); рабочие модели: `antigravity/claude-sonnet-4-6` (дефолт архитектора), `antigravity/gemini-3.8-flash-low`; `vectide3/*`, `kimi`, `x/*`, `ds/*` по этому ключу недоступны/без баланса.

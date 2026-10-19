@@ -7,6 +7,10 @@ import numpy as np
 import pyloudnorm
 import scipy.signal as sig
 
+
+def _mono(x):
+    return x.mean(axis=1) if getattr(x, "ndim", 1) == 2 else x
+
 BANDS = [(20, 120, "sub"), (120, 600, "lowmid"), (600, 3000, "mid"),
          (3000, 8000, "pres"), (8000, 22050, "air")]
 
@@ -61,3 +65,22 @@ def report(stems, fs):
             + ("\nМАСКИРОВКА (общая энергия полосы >0.25):\n" + "\n".join(mask)
                if mask else ""))
     return {"mix_lufs": mix_lufs, "stems": data, "text": text}
+
+
+def space(dry, wet, fs):
+    """diffuse_db — доля энергии wet, не объяснимая линейным фильтром от dry
+    (поздняя реверберация). width_db — side/mid у wet."""
+    d, w = _mono(dry), _mono(wet)
+    n = min(len(d), len(w))
+    d, w = d[:n], w[:n]
+    f, coh = sig.coherence(d, w, fs=fs, nperseg=2048)
+    _, power = sig.welch(w, fs=fs, nperseg=2048)
+    band = (f > 150) & (f < 8000)
+    weight = float(np.sum(power[band]) + 1e-20)
+    coherence = float(np.sum(coh[band] * power[band]) / weight)
+    diffuse = min(max(1 - coherence, 1e-6), 1 - 1e-6)
+    out = {"diffuse_db": round(10 * np.log10(diffuse / (1 - diffuse)), 2), "width_db": None}
+    if getattr(wet, "ndim", 1) == 2 and wet.shape[1] == 2:
+        mid, side = (wet[:, 0] + wet[:, 1]) / 2, (wet[:, 0] - wet[:, 1]) / 2
+        out["width_db"] = round(10 * np.log10((side ** 2).mean() / ((mid ** 2).mean() + 1e-20) + 1e-12), 2)
+    return out

@@ -1,0 +1,7 @@
+numpy
+scipy
+soundfile
+pyloudnorm
+librosa
+musdb
+mcp<2

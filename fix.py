@@ -13,7 +13,6 @@ import argparse
 import json
 from pathlib import Path
 
-import musdb
 import numpy as np
 
 import judge
@@ -86,6 +85,7 @@ def main():
         def ask(q, clip):
             return judge.ask(args.server, STATE, q, clips=[clip])
 
+    import musdb
     db = musdb.DB(root="data/MUSDB18/MUSDB18-7", is_wav=False)
     idxs = [int(i) for i in args.tracks.split(",")]
     offsets = [float(s) for s in args.offsets.split(",")]

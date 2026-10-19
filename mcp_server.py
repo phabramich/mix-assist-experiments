@@ -5,11 +5,13 @@
 """
 import json
 import subprocess
+import sys
+from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-PY = "/Users/phabramich/dev/mix-assist/.venv/bin/python"
-CWD = "/Users/phabramich/dev/mix-assist"
+PY = sys.executable
+CWD = str(Path(__file__).resolve().parent)
 mcp = FastMCP("mix-assist")
 
 
@@ -132,6 +134,97 @@ def bounce(track: int = 0, knobs_json: str = "{}", out: str = "",
             *_sess(session)]
     if out:
         args += ["--out", out]
+    return run(*args)
+
+
+PLAN_DOC = """Записать plan.json. Схема:
+{"z_default": 0, "xfade_s": 0.4, "stems": {"vox": {"z": 2, "wet": 1.0,
+ "knobs": {"gain_db": 1.5}, "sections": {"verse": {"wet": 0.4}, "s07": {"z": 1}}}},
+ "_master": {"gain_db": 0}}
+Разрешение для (стем, секция): дефолт z_default/wet=1/пустые knobs, затем поля стема,
+затем sections[label], затем sections[id]. wet 0..1: 0 = сухой сигнал, 1 = MEGAMI.
+Ручки: gain_db, hpf_hz, lowmid_f, lowmid_db, pres_f, pres_db, shelf_db, pan, haas_ms, rev_db.
+Стемы вне плана получают дефолты. z должен существовать в банке, если wet > 0."""
+
+
+@mcp.tool()
+def session_init(src: str, name: str) -> str:
+    """Скопировать WAV стемов в sessions/<name>/dry (44.1 кГц, общая длина)."""
+    return run("session-init", "--src", src, "--name", name)
+
+
+@mcp.tool()
+def detect_sections(session: str, bpm: float = 0, force: bool = False,
+                    use_mf: bool = True) -> str:
+    """Найти секции (биты, новизна, активность стемов) и записать sections.json.
+    bpm=0 — оценить темп. use_mf — попросить Music Flamingo описать кластеры.
+    Существующий файл не перезаписывается без force."""
+    args = ["sections", "--session", session]
+    if bpm:
+        args += ["--bpm", str(bpm)]
+    if force:
+        args += ["--force"]
+    if not use_mf:
+        args += ["--no-mf"]
+    return run(*args)
+
+
+@mcp.tool()
+def save_sections(session: str, sections_json: str) -> str:
+    """Записать sections.json (после ручной правки label) и проверить целостность."""
+    return run("save-sections", "--session", session, "--json", sections_json)
+
+
+@mcp.tool()
+def save_plan(session: str, plan_json: str) -> str:
+    """Записать plan.json и проверить его. """ + PLAN_DOC
+    return run("save-plan", "--session", session, "--json", plan_json)
+
+
+@mcp.tool()
+def measure_space(session: str, stem: str) -> str:
+    """diffuse_db и width_db стема по каждой секции. Пространство слышат только эти метры."""
+    return run("space", "--session", session, "--stem", stem)
+
+
+@mcp.tool()
+def job_status(job_id: str) -> str:
+    """Состояние фоновой задачи: running | done | failed, хвост лога, JSON-результат."""
+    return run("job-status", "--id", job_id)
+
+
+@mcp.tool()
+def render_plan_estimate(session: str) -> str:
+    """Сколько кусков MEGAMI ещё не в кэше и оценка минут. Ничего не рендерит."""
+    return run("render-plan", "--session", session, "--dry-run")
+
+
+@mcp.tool()
+def megami_bank(session: str, n: int = 8) -> str:
+    """Фоном сгенерировать банк из n эмбеддингов стиля. Вернёт job id, статус — job_status."""
+    return run("job-start", "--", "megami-bank", "--session", session, "--n", str(n))
+
+
+@mcp.tool()
+def megami_candidates(session: str, stem: str, labels: str) -> str:
+    """Фоном отрендерить 12 с каждого z для стема на label (через запятую) и измерить пространство.
+    labels например 'verse,chorus'. Результат — megami/candidates_<stem>.json."""
+    return run("job-start", "--", "megami-candidates", "--session", session,
+               "--stem", stem, "--labels", labels)
+
+
+@mcp.tool()
+def render_plan(session: str, out: str = "", from_s: float = None,
+                to_s: float = None) -> str:
+    """Фоном собрать микс по plan.json. Недостающие куски MEGAMI дорендерит.
+    Повторный вызов после правки ручек берёт кэш."""
+    args = ["job-start", "--", "render-plan", "--session", session]
+    if out:
+        args += ["--out", out]
+    if from_s is not None:
+        args += ["--from_s", str(from_s)]
+    if to_s is not None:
+        args += ["--to_s", str(to_s)]
     return run(*args)
 
 
